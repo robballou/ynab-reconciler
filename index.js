@@ -9,6 +9,9 @@ const { YNAB } = require('./lib/ynab');
 let token = null;
 const d = debug('ynab-reconciler:main');
 
+/**
+ * Pose a question.
+ */
 const question = async function question(text) {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
@@ -22,6 +25,9 @@ const question = async function question(text) {
   });
 };
 
+/**
+ * Get or choose an account.
+ */
 const getAccount = async function getAccount(ynab, budgetId) {
   if (typeof process.env.YNAB_ACCOUNT !== 'undefined') {
     return Promise.resolve(process.env.YNAB_ACCOUNT);
@@ -50,6 +56,9 @@ const getAccount = async function getAccount(ynab, budgetId) {
   });
 };
 
+/**
+ * Get or choose a budget.
+ */
 const getBudget = async function getBudget(ynab) {
   if (typeof process.env.YNAB_BUDGET !== 'undefined') {
     return Promise.resolve(process.env.YNAB_BUDGET);
