@@ -3,6 +3,9 @@ require('dotenv').config();
 const readline = require('readline');
 const minimist = require('minimist');
 const debug = require('debug');
+const csv = require('csv-parse');
+const os = require('os');
+const fs = require('fs');
 
 const { YNAB } = require('./lib/ynab');
 
@@ -87,7 +90,30 @@ const getBudget = async function getBudget(ynab) {
   });
 };
 
-const assertToken = async function assertToken() {
+const getTransactions = async function getTransactions(ynab, budgetId, accountId) {
+  return new Promise((resolve, reject) => {
+    fs.readFile('transactions', async (err, data) => {
+      if (err) {
+        const transactions = await ynab.getTransactions(budgetId, accountId);
+        fs.writeFile('transactions', JSON.stringify(transactions), () => {
+          resolve(transactions);
+        });
+      }
+      else {
+        resolve(JSON.parse(data));
+      }
+    });
+  });
+};
+
+const assertCsv = async function assertCsv(args) {
+  if (typeof args.csv === 'undefined') {
+    console.error('Invalid CSV file. Specify a CSV file with --csv');
+    process.exit(1);
+  }
+};
+
+const assertToken = async function assertToken(args) {
   if (!token) {
     token = await question('YNAB token:');
   }
@@ -98,21 +124,63 @@ const assertToken = async function assertToken() {
   }
 };
 
+const getHome = function getHome() {
+  const osHome = os.homedir();
+  const home = process.env.HOME || osHome;
+  return `${home}/`;
+};
+
 const main = async function main(args) {
   if (typeof process.env.YNAB_TOKEN !== 'undefined') {
     token = process.env.YNAB_TOKEN;
   }
+  else if (typeof args.token !== 'undefined') {
+    token = args.token;
+  }
 
   assertToken();
+  assertCsv(args);
   const ynab = new YNAB(token);
 
-  const budgetId = await getBudget(ynab);
-  const accountId = await getAccount(ynab);
+  const budgetId = args.budget || await getBudget(ynab);
+  const accountId = args.account || await getAccount(ynab);
 
   d(`Budget:\t${budgetId}`);
   d(`Account:\t${accountId}`);
 
   // get transactions
+  const transactions = await getTransactions(ynab, budgetId, accountId);
+  const hashtable = {};
+
+  transactions.data.transactions.forEach((transaction) => {
+    const entry = transaction.payee_name.substr(0, 1);
+    if (typeof hashtable[entry] === 'undefined') {
+      hashtable[entry] = [];
+    }
+
+    hashtable[entry].push(transaction);
+  });
+
+  const path = args.csv.replace('~/', getHome());
+
+  const readStream = fs.createReadStream(path);
+  const parser = csv();
+  parser.on('readable', () => {
+    const entry = [];
+    let item;
+    while (item = parser.read()) {
+      entry.push(item);
+    }
+    console.log(entry);
+  });
+  parser.on('error', (err) => {
+    console.error(err);
+  });
+  readStream.pipe(parser);
+  readStream.on('end', () => {
+    parser.end();
+  });
+
   // check if CSV file is specified
 };
 
